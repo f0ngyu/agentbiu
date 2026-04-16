@@ -72,17 +72,12 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - name: Download macOS zip
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: AgentBIU-macos-zip
           path: artifacts
-
-      - name: Download Windows zip
-        uses: actions/download-artifact@v4
-        with:
-          name: AgentBIU-windows-zip
-          path: artifacts
+          pattern: AgentBIU-*-zip
+          merge-multiple: true
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
