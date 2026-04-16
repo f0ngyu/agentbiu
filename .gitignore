@@ -7,6 +7,8 @@ node_modules
 dist
 coverage
 *.log
+*.bun-build
+.*.bun-build
 frontend/dist
 server/dist
 shared/dist
