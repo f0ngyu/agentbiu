@@ -1,0 +1,27 @@
+{
+  "name": "@agentbiu/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build:bin": "bun build --compile src/index.ts --outfile dist/agentbiu-server",
+    "start": "bun dist/index.js",
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@agentbiu/shared": "workspace:*",
+    "dotenv": "latest",
+    "hono": "latest",
+    "viem": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "bun-types": "latest",
+    "eslint": "latest",
+    "typescript": "latest"
+  }
+}

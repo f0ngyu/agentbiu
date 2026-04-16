@@ -1,0 +1,34 @@
+{
+  "name": "agentbiu",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.11",
+  "workspaces": [
+    "frontend",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,frontend -c blue,magenta \"bun run --cwd server dev\" \"bun run --cwd frontend dev\"",
+    "build": "bun run build:shared && bun run build:server && bun run build:frontend",
+    "build:shared": "bun run --cwd shared build",
+    "build:server": "bun run --cwd server build",
+    "build:server:bin": "bun run --cwd server build:bin",
+    "build:frontend": "bun run --cwd frontend build",
+    "start:prod": "FRONTEND_DIST_DIR=frontend/dist bun run --cwd server start",
+    "check": "bun run --cwd shared check && bun run --cwd server check && bun run --cwd frontend check",
+    "lint": "bun run --cwd shared lint && bun run --cwd server lint && bun run --cwd frontend lint",
+    "test": "bun run --cwd shared test && bun run --cwd server test",
+    "doctor": "bun run scripts/doctor.ts",
+    "package:macos": "bun run scripts/package-macos.ts",
+    "package:macos:zip": "bun run scripts/package-macos.ts && cd release && ditto -c -k --sequesterRsrc --keepParent AgentBIU-macos AgentBIU-macos.zip"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "concurrently": "latest",
+    "eslint-plugin-vue": "latest",
+    "globals": "latest",
+    "typescript-eslint": "latest",
+    "vue-eslint-parser": "latest"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@agentbiu/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "eslint": "latest",
+    "typescript": "latest"
+  }
+}
