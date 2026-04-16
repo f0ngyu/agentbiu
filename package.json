@@ -21,7 +21,8 @@
     "test": "bun run --cwd shared test && bun run --cwd server test",
     "doctor": "bun run scripts/doctor.ts",
     "package:macos": "bun run scripts/package-macos.ts",
-    "package:macos:zip": "bun run scripts/package-macos.ts && cd release && ditto -c -k --sequesterRsrc --keepParent AgentBIU-macos AgentBIU-macos.zip"
+    "package:macos:zip": "bun run scripts/package-macos.ts && cd release && ditto -c -k --sequesterRsrc --keepParent AgentBIU-macos AgentBIU-macos.zip",
+    "package:windows": "bun run scripts/package-windows.ts"
   },
   "devDependencies": {
     "@eslint/js": "latest",

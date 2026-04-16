@@ -63,6 +63,15 @@ bun run start:prod
 
 - `http://127.0.0.1:3000`
 
+## GitHub Actions 发布
+
+推送以 `v` 开头的 tag（例如 `v0.1.0`）会触发 [Release 工作流](.github/workflows/release.yml)，自动构建并上传：
+
+- `AgentBIU-macos.zip`：解压后双击 `start.command`
+- `AgentBIU-windows.zip`：解压后双击 `start.bat`
+
+在仓库 **Actions** 里也可手动运行同一工作流（不上传 Release，仅保留本次运行的 Artifacts）。
+
 ## macOS 打包
 
 生成面向普通用户的发布包：
