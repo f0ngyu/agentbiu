@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import { existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { appEnv } from './lib/env';
+import { getErrorStatus } from './lib/errors';
 import { systemRoutes } from './routes/system';
 import { walletRoutes } from './routes/wallet';
 import { identityRoutes } from './routes/identity';
@@ -10,8 +10,22 @@ import { launchRoutes } from './routes/launch';
 
 const app = new Hono();
 
-app.use('/api/*', cors());
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
 app.use('/api/*', async (c, next) => {
+  if (isWriteMethod(c.req.method)) {
+    const source = c.req.header('origin') || c.req.header('referer');
+    if (source && !isLocalSource(source)) {
+      return c.json(
+        {
+          success: false,
+          error: '禁止跨站请求，请在本地 AgentBIU 页面中操作',
+        },
+        403,
+      );
+    }
+  }
+
   const startedAt = Date.now();
   await next();
   console.info(`[api] ${c.req.method} ${c.req.path} -> ${c.res.status} (${Date.now() - startedAt}ms)`);
@@ -42,7 +56,7 @@ app.onError((error, c) => {
       success: false,
       error: error instanceof Error ? error.message : '服务内部错误',
     },
-    500,
+    getErrorStatus(error, 500),
   );
 });
 
@@ -88,4 +102,17 @@ function resolveFrontendDistDir() {
   if (existsSync(fallback)) return fallback;
 
   return null;
+}
+
+function isWriteMethod(method: string) {
+  return method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
+}
+
+function isLocalSource(source: string) {
+  try {
+    const url = new URL(source);
+    return LOCAL_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
 }

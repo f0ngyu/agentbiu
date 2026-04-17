@@ -251,6 +251,7 @@ const raisedTokens = computed(() => verification.value?.raisedTokens || []);
 const browserAddress = ref<string | null>(null);
 const browserChainId = ref<number | null>(null);
 const browserAccessToken = ref('');
+const browserAccessTokenAddress = ref<string | null>(null);
 
 const identityResult = ref<IdentityCheckResult | null>(null);
 const identityStatus = ref<IdentityStatus>('unknown');
@@ -326,6 +327,10 @@ async function connectWallet() {
   try {
     clearMessages();
     const result = await connectBrowserWallet();
+    if (browserAddress.value?.toLowerCase() !== result.address.toLowerCase()) {
+      browserAccessToken.value = '';
+      browserAccessTokenAddress.value = null;
+    }
     browserAddress.value = result.address;
     browserChainId.value = result.chainId;
     statusMessage.value = `浏览器钱包已连接：${result.address}`;
@@ -339,6 +344,10 @@ async function switchNetwork() {
     clearMessages();
     await switchToBsc();
     const result = await connectBrowserWallet();
+    if (browserAddress.value?.toLowerCase() !== result.address.toLowerCase()) {
+      browserAccessToken.value = '';
+      browserAccessTokenAddress.value = null;
+    }
     browserAddress.value = result.address;
     browserChainId.value = 56;
     statusMessage.value = '已切换到 BSC 网络。';
@@ -429,7 +438,14 @@ async function ensureIdentity() {
 }
 
 async function ensureBrowserLogin() {
-  if (browserAccessToken.value) return browserAccessToken.value;
+  if (
+    browserAccessToken.value &&
+    browserAddress.value &&
+    browserAccessTokenAddress.value?.toLowerCase() === browserAddress.value.toLowerCase()
+  ) {
+    return browserAccessToken.value;
+  }
+
   if (!browserAddress.value) {
     await connectWallet();
   }
@@ -450,6 +466,7 @@ async function ensureBrowserLogin() {
   });
 
   browserAccessToken.value = login.accessToken;
+  browserAccessTokenAddress.value = browserAddress.value;
   return browserAccessToken.value;
 }
 

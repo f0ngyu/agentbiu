@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { launchFormSchema, readLaunchFormFields } from '@agentbiu/shared';
 import { tokenLaunchService } from '../services/token-launch-service';
 import { walletSessionService } from '../services/wallet-service';
-import { getErrorMessage } from '../lib/errors';
+import { getErrorMessage, getErrorStatus, HttpError } from '../lib/errors';
 
 export const launchRoutes = new Hono();
 
@@ -18,7 +18,7 @@ launchRoutes.post('/private-key', async (c) => {
     return c.json({ success: true, data });
   } catch (error) {
     console.error('[launch] private-key flow failed', error);
-    return c.json({ success: false, error: getErrorMessage(error) }, 500);
+    return c.json({ success: false, error: getErrorMessage(error) }, getErrorStatus(error, 500));
   }
 });
 
@@ -33,7 +33,7 @@ launchRoutes.post('/browser/prepare', async (c) => {
     return c.json({ success: true, data });
   } catch (error) {
     console.error('[launch] browser prepare failed', error);
-    return c.json({ success: false, error: getErrorMessage(error) }, 500);
+    return c.json({ success: false, error: getErrorMessage(error) }, getErrorStatus(error, 500));
   }
 });
 
@@ -41,13 +41,13 @@ export async function parseLaunchRequest(request: { formData(): Promise<FormData
   const formData = await request.formData();
   const image = formData.get('image');
   if (!(image instanceof File)) {
-    throw new Error('请上传 token 图片');
+    throw new HttpError(400, '请上传 token 图片');
   }
 
   const parsed = launchFormSchema.safeParse(readLaunchFormFields(formData));
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message || '表单参数不合法');
+    throw new HttpError(400, parsed.error.issues[0]?.message || '表单参数不合法');
   }
 
   return {
