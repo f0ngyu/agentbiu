@@ -1,17 +1,72 @@
 <template>
   <main class="page-shell">
     <section class="hero">
-      <p class="eyebrow">Four.meme Agent Launchpad</p>
-      <h1>本地一键发币 WebUI</h1>
-      <p class="hero-copy">
-        不依赖 Cursor 或 OpenClaw。配置本地私钥，或连接浏览器钱包后，即可自动检查 8004 NFT 并完成
-        four.meme 发币。
-      </p>
-      <div class="hero-meta">
-        <span class="meta-pill">BSC Only</span>
-        <span class="meta-pill">Bun + Vue3</span>
-        <span class="meta-pill">自动打开浏览器</span>
+      <div class="hero-copy-block">
+        <p class="eyebrow">Four.meme Agent Launchpad</p>
+        <h1>本地一键发币 WebUI</h1>
+        <p class="hero-copy">
+          不依赖 Cursor 或 OpenClaw。配置本地私钥，或连接浏览器钱包后，即可自动检查 8004 NFT 并完成
+          four.meme 发币。
+        </p>
+        <div class="hero-meta">
+          <span class="meta-pill">BSC Only</span>
+          <span class="meta-pill">Bun + Vue3</span>
+          <span class="meta-pill">自动打开浏览器</span>
+        </div>
       </div>
+
+      <aside class="hero-surface panel">
+        <div class="hero-surface-header">
+          <div>
+            <p class="eyebrow">Live Snapshot</p>
+            <h3>当前工作台</h3>
+          </div>
+          <button class="ghost-button" type="button" @click="reloadBootstrap">刷新环境</button>
+        </div>
+
+        <div class="hero-hud">
+          <div class="hud-card">
+            <span>模式</span>
+            <strong>{{ walletMode === 'privateKey' ? '私钥模式' : '浏览器钱包' }}</strong>
+          </div>
+          <div class="hud-card">
+            <span>地址</span>
+            <strong class="mono-text">{{ currentAddress || '未连接' }}</strong>
+          </div>
+          <div class="hud-card">
+            <span>网络</span>
+            <strong>{{ verification ? verification.networkName : '未加载' }}</strong>
+          </div>
+          <div class="hud-card">
+            <span>8004</span>
+            <strong>
+              {{
+                identityStatus === 'ready'
+                  ? '已就绪'
+                  : identityStatus === 'missing'
+                    ? '待申请'
+                    : identityStatus === 'registering'
+                      ? '申请中'
+                      : '未检查'
+              }}
+            </strong>
+          </div>
+        </div>
+
+        <div class="hero-surface-footer">
+          <p class="helper-text">
+            这里展示当前会话状态。先看工作台是否稳定，再进入发币流程。
+          </p>
+          <button
+            class="secondary-button"
+            type="button"
+            :disabled="busyIdentity || !currentAddress"
+            @click="checkIdentity"
+          >
+            检查身份
+          </button>
+        </div>
+      </aside>
     </section>
 
     <section class="layout-grid">
@@ -78,95 +133,122 @@
           </button>
         </div>
 
-        <div class="form-grid">
-          <label class="field upload-field">
-            <span>Token 图片</span>
-            <input type="file" accept="image/*" @change="handleImageChange" />
-            <span class="helper-text">{{ imageFile?.name || '支持 PNG / JPG / WEBP / GIF' }}</span>
-          </label>
-
-          <label class="field">
-            <span>Token Name</span>
-            <input v-model="form.name" type="text" placeholder="输入代币名称" />
-          </label>
-
-          <label class="field">
-            <span>Ticker Symbol</span>
-            <input v-model="form.shortName" type="text" placeholder="例如 GPEPE" />
-          </label>
-
-          <label class="field field-full">
-            <span>Description</span>
-            <textarea v-model="form.desc" rows="5" placeholder="填写代币描述" />
-          </label>
-
-          <label class="field">
-            <span>分类</span>
-            <select v-model="form.label">
-              <option v-for="label in tokenLabels" :key="label" :value="label">
-                {{ label }}
-              </option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>创建时预买入 {{ form.raisedTokenSymbol }}</span>
-            <input v-model="form.preSale" type="number" min="0" step="0.0001" />
-            <span class="helper-text">
-              创建 token 时一起打入的首购资金，接近 dev 首购；填 0 表示不预先买入。非 BNB
-              底池会先请求授权对应代币，再发起创建交易。
-            </span>
-          </label>
-
-          <label class="field">
-            <span>官网</span>
-            <input v-model="form.webUrl" type="url" placeholder="https://example.com" />
-          </label>
-
-          <label class="field">
-            <span>Twitter</span>
-            <input v-model="form.twitterUrl" type="url" placeholder="https://x.com/yourtoken" />
-          </label>
-
-          <label class="field">
-            <span>Telegram</span>
-            <input v-model="form.telegramUrl" type="url" placeholder="https://t.me/yourtoken" />
-          </label>
-
-          <label class="field">
-            <span>8004 Agent 名称</span>
-            <input v-model="form.agentName" type="text" placeholder="建议与项目名一致" />
-          </label>
-
-          <label class="field">
-            <span>8004 图片链接</span>
-            <input v-model="form.agentImageUrl" type="url" placeholder="可选，用于 8004 元数据" />
-          </label>
-
-          <label class="field field-full">
-            <span>8004 描述</span>
-            <input
-              v-model="form.agentDescription"
-              type="text"
-              placeholder="可选，默认会使用内置 agent 描述"
-            />
-          </label>
-
-          <div class="field field-full">
-            <span>Raised Token</span>
-            <div class="pill-group">
-              <button
-                v-for="token in raisedTokens"
-                :key="token.symbol"
-                type="button"
-                class="chip-button"
-                :class="{ active: form.raisedTokenSymbol === token.symbol }"
-                @click="form.raisedTokenSymbol = token.symbol"
-              >
-                {{ token.symbol }}
-              </button>
+        <div class="launch-form">
+          <section class="form-section">
+            <div class="section-head">
+              <p class="eyebrow">基础内容</p>
+              <h4>Token 信息</h4>
             </div>
-          </div>
+
+            <div class="form-grid launch-grid">
+              <label class="field field-full upload-field">
+                <span>Token 图片</span>
+                <input type="file" accept="image/*" @change="handleImageChange" />
+                <span class="helper-text">{{ imageFile?.name || '支持 PNG / JPG / WEBP / GIF' }}</span>
+              </label>
+
+              <label class="field field-span-6">
+                <span>Token Name</span>
+                <input v-model="form.name" type="text" placeholder="输入代币名称" />
+              </label>
+
+              <label class="field field-span-6">
+                <span>Ticker Symbol</span>
+                <input v-model="form.shortName" type="text" placeholder="例如 GPEPE" />
+              </label>
+
+              <label class="field field-full">
+                <span>Description</span>
+                <textarea v-model="form.desc" rows="5" placeholder="填写代币描述" />
+              </label>
+
+              <label class="field field-span-4">
+                <span>分类</span>
+                <select v-model="form.label">
+                  <option v-for="label in tokenLabels" :key="label" :value="label">
+                    {{ label }}
+                  </option>
+                </select>
+              </label>
+
+              <label class="field field-span-8">
+                <span>创建时预买入 {{ form.raisedTokenSymbol }}</span>
+                <input v-model="form.preSale" type="number" min="0" step="0.0001" />
+                <span class="helper-text">
+                  创建 token 时一起打入的首购资金，接近 dev 首购；填 0 表示不预先买入。非 BNB
+                  底池会先请求授权对应代币，再发起创建交易。
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="section-head">
+              <p class="eyebrow">外部链接</p>
+              <h4>展示信息</h4>
+            </div>
+
+            <div class="form-grid launch-grid">
+              <label class="field field-span-4">
+                <span>官网</span>
+                <input v-model="form.webUrl" type="url" placeholder="https://example.com" />
+              </label>
+
+              <label class="field field-span-4">
+                <span>Twitter</span>
+                <input v-model="form.twitterUrl" type="url" placeholder="https://x.com/yourtoken" />
+              </label>
+
+              <label class="field field-span-4">
+                <span>Telegram</span>
+                <input v-model="form.telegramUrl" type="url" placeholder="https://t.me/yourtoken" />
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="section-head">
+              <p class="eyebrow">8004 资料</p>
+              <h4>Agent 身份</h4>
+            </div>
+
+            <div class="form-grid launch-grid">
+              <label class="field field-span-6">
+                <span>8004 Agent 名称</span>
+                <input v-model="form.agentName" type="text" placeholder="建议与项目名一致" />
+              </label>
+
+              <label class="field field-span-6">
+                <span>8004 图片链接</span>
+                <input v-model="form.agentImageUrl" type="url" placeholder="可选，用于 8004 元数据" />
+              </label>
+
+              <label class="field field-full">
+                <span>8004 描述</span>
+                <input
+                  v-model="form.agentDescription"
+                  type="text"
+                  placeholder="可选，默认会使用内置 agent 描述"
+                />
+              </label>
+
+              <div class="field field-full">
+                <span>Raised Token</span>
+                <div class="pill-group">
+                  <button
+                    v-for="token in raisedTokens"
+                    :key="token.symbol"
+                    type="button"
+                    class="chip-button"
+                    :class="{ active: form.raisedTokenSymbol === token.symbol }"
+                    @click="form.raisedTokenSymbol = token.symbol"
+                  >
+                    {{ token.symbol }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div class="status-stack">
