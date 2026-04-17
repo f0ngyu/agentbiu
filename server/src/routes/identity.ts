@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { walletSessionService } from '../services/wallet-service';
 import { nft8004Service } from '../services/nft8004-service';
+import { getErrorMessage } from '../lib/errors';
 
 const requestSchema = z.object({
   agentName: z.string().trim().min(1, '请输入 Agent 名称'),
@@ -48,6 +49,3 @@ identityRoutes.post('/register/browser/prepare', async (c) => {
   }
 });
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '未知错误';
-}

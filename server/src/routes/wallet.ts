@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { addressPayloadSchema, walletLoginSchema } from '@agentbiu/shared';
 import { fourMemeClient } from '../services/fourmeme-client';
+import { getErrorMessage } from '../lib/errors';
 
 export const walletRoutes = new Hono();
 
@@ -36,6 +37,3 @@ walletRoutes.post('/login', async (c) => {
   }
 });
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '未知错误';
-}

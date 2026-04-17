@@ -1,14 +1,19 @@
 import {
   BSC_CHAIN_ID,
   BSC_CHAIN_NAME,
-  type RaisedTokenConfig,
   type LaunchFormInput,
   type LaunchPreparation,
   type LaunchResult,
+  type RaisedTokenConfig,
+  type TokenReceiptLog,
   type VerificationInfo,
   TOKEN_MANAGER2_ADDRESS,
+  computeCreationFeeWei,
+  computeRequiredAllowance,
+  extractTokenAddressFromLogs,
+  parseTokenAmount,
 } from '@agentbiu/shared';
-import { createPublicClient, createWalletClient, decodeEventLog, http, parseAbi, parseUnits } from 'viem';
+import { createPublicClient, createWalletClient, http, parseAbi } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { bsc } from 'viem/chains';
 import { appEnv } from '../lib/env';
@@ -28,13 +33,35 @@ const erc20Abi = parseAbi([
 
 const writeAbi = parseAbi([
   'function createToken(bytes args, bytes signature) payable',
-  'event TokenCreate(address creator, address token, uint256 requestId, string name, string symbol, uint256 totalSupply, uint256 launchTime, uint256 launchFee)',
 ]);
 
 function normalizeHex(value: string): `0x${string}` {
   if (value.startsWith('0x')) return value as `0x${string}`;
   if (/^[0-9a-fA-F]+$/.test(value)) return `0x${value}` as `0x${string}`;
   return `0x${Buffer.from(value, 'base64').toString('hex')}` as `0x${string}`;
+}
+
+export function extractLaunchedTokenAddress(logs: TokenReceiptLog[]) {
+  return extractTokenAddressFromLogs(logs);
+}
+
+export function computeLaunchRequiredAllowance(
+  preSaleValue: string | number,
+  decimals: number,
+  feeRate: bigint,
+) {
+  const preSaleUnits = parseTokenAmount(preSaleValue, decimals);
+  if (preSaleUnits <= 0n) return 0n;
+  return computeRequiredAllowance(preSaleUnits, feeRate);
+}
+
+export function computeLaunchCreationFee(
+  launchFee: bigint,
+  raisedSymbol: string,
+  preSaleValue: string,
+  tradingFeeRate: bigint,
+) {
+  return computeCreationFeeWei(launchFee, raisedSymbol, preSaleValue, tradingFeeRate);
 }
 
 export class TokenLaunchService {
@@ -137,7 +164,7 @@ export class TokenLaunchService {
     console.info(`[launch] createToken tx submitted: ${txHash}`);
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash: txHash });
     console.info(`[launch] receipt status: ${receipt.status}`);
-    const tokenAddress = this.extractTokenAddress(receipt.logs);
+    const tokenAddress = extractLaunchedTokenAddress(receipt.logs as TokenReceiptLog[]);
     console.info(`[launch] token address parsed: ${tokenAddress ?? 'null'}`);
 
     return {
@@ -146,28 +173,6 @@ export class TokenLaunchService {
       walletAddress: account.address,
       tokenAddress,
     };
-  }
-
-  private extractTokenAddress(
-    logs: Array<{ address: string; data: `0x${string}`; topics: readonly `0x${string}`[] }>,
-  ): string | null {
-    for (const log of logs) {
-      if (log.address.toLowerCase() !== TOKEN_MANAGER2_ADDRESS.toLowerCase()) continue;
-      try {
-        const decoded = decodeEventLog({
-          abi: writeAbi,
-          data: log.data,
-          topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
-        });
-        if (decoded.eventName === 'TokenCreate') {
-          return (decoded.args as { token: string }).token;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return null;
   }
 
   private async ensureRaisedTokenApproval(
@@ -202,10 +207,8 @@ export class TokenLaunchService {
       }),
     ]);
 
-    const preSaleUnits = parseUnits(preSaleValue, Number(decimals));
-    if (preSaleUnits <= 0n) return;
-
-    const requiredAllowance = preSaleUnits + (preSaleUnits * feeRate) / 10000n;
+    const requiredAllowance = computeLaunchRequiredAllowance(preSaleValue, Number(decimals), feeRate);
+    if (requiredAllowance <= 0n) return;
     if (allowance >= requiredAllowance) {
       console.info(`[launch] ${raisedToken.symbol} allowance already sufficient`);
       return;
@@ -231,20 +234,17 @@ export class TokenLaunchService {
       functionName: '_launchFee',
     });
 
-    let value = launchFee;
-    const preSaleFloat = Number(preSaleValue || '0');
-    const preSaleWei = preSaleFloat > 0 ? BigInt(Math.round(preSaleFloat * 1e18)) : 0n;
-    if (raisedSymbol === 'BNB' && preSaleWei > 0n) {
-      const tradingFeeRate = await this.publicClient.readContract({
-        address: TOKEN_MANAGER2_ADDRESS,
-        abi: readAbi,
-        functionName: '_tradingFeeRate',
-      });
-
-      value += preSaleWei + (preSaleWei * tradingFeeRate) / 10000n;
+    if (raisedSymbol !== 'BNB' || parseTokenAmount(preSaleValue, 18) <= 0n) {
+      return launchFee.toString();
     }
 
-    return value.toString();
+    const tradingFeeRate = await this.publicClient.readContract({
+      address: TOKEN_MANAGER2_ADDRESS,
+      abi: readAbi,
+      functionName: '_tradingFeeRate',
+    });
+
+    return computeLaunchCreationFee(launchFee, raisedSymbol, preSaleValue, tradingFeeRate).toString();
   }
 }
 

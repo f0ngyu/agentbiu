@@ -19,6 +19,8 @@ type FourMemeResponse<T> = {
   message?: string;
 };
 
+const DEFAULT_TIMEOUT_MS = 15000;
+
 function ensureSuccess<T>(payload: FourMemeResponse<T>, fallback: string): T {
   if (payload.code === 0 || payload.code === '0') {
     return payload.data;
@@ -27,29 +29,31 @@ function ensureSuccess<T>(payload: FourMemeResponse<T>, fallback: string): T {
 }
 
 export class FourMemeClient {
-  async fetchPublicConfig(): Promise<RaisedTokenConfig[]> {
-    const response = await fetch(`${FOUR_MEME_API_BASE}/public/config`);
-    if (!response.ok) {
-      throw new Error(`获取 four.meme 配置失败: ${response.status}`);
-    }
+  constructor(private readonly timeoutMs = DEFAULT_TIMEOUT_MS) {}
 
-    const payload = (await response.json()) as FourMemeResponse<RaisedTokenConfig[]>;
-    const configs = ensureSuccess(payload, '无法读取 raised token 配置');
+  async fetchPublicConfig(): Promise<RaisedTokenConfig[]> {
+    const configs = await this.request<RaisedTokenConfig[]>(
+      '/public/config',
+      undefined,
+      '获取 four.meme 配置失败',
+    );
     return this.filterOfficialRaisedTokens(configs);
   }
 
   async generateNonce(address: string): Promise<WalletNonceResponse> {
-    const response = await fetch(`${FOUR_MEME_API_BASE}/private/user/nonce/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accountAddress: address,
-        verifyType: 'LOGIN',
-        networkCode: FOUR_MEME_NETWORK_CODE,
-      }),
-    });
-    const payload = (await response.json()) as FourMemeResponse<string>;
-    const nonce = ensureSuccess(payload, '获取登录 nonce 失败');
+    const nonce = await this.request<string>(
+      '/private/user/nonce/generate',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountAddress: address,
+          verifyType: 'LOGIN',
+          networkCode: FOUR_MEME_NETWORK_CODE,
+        }),
+      },
+      '获取登录 nonce 失败',
+    );
     return {
       nonce,
       message: `You are sign in Meme ${nonce}`,
@@ -57,27 +61,28 @@ export class FourMemeClient {
   }
 
   async loginWithSignature(input: WalletLoginInput): Promise<WalletLoginResult> {
-    const response = await fetch(`${FOUR_MEME_API_BASE}/private/user/login/dex`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        region: 'WEB',
-        langType: 'EN',
-        loginIp: '',
-        inviteCode: '',
-        verifyInfo: {
-          address: input.address,
-          networkCode: FOUR_MEME_NETWORK_CODE,
-          signature: input.signature,
-          verifyType: 'LOGIN',
-        },
-        walletName: 'MetaMask',
-      }),
-    });
-
-    const payload = (await response.json()) as FourMemeResponse<string>;
     return {
-      accessToken: ensureSuccess(payload, 'four.meme 登录失败'),
+      accessToken: await this.request<string>(
+        '/private/user/login/dex',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: 'WEB',
+            langType: 'EN',
+            loginIp: '',
+            inviteCode: '',
+            verifyInfo: {
+              address: input.address,
+              networkCode: FOUR_MEME_NETWORK_CODE,
+              signature: input.signature,
+              verifyType: 'LOGIN',
+            },
+            walletName: 'MetaMask',
+          }),
+        },
+        'four.meme 登录失败',
+      ),
     };
   }
 
@@ -85,37 +90,38 @@ export class FourMemeClient {
     const formData = new FormData();
     formData.set('file', file, file.name);
 
-    const response = await fetch(`${FOUR_MEME_API_BASE}/private/token/upload`, {
-      method: 'POST',
-      headers: {
-        'meme-web-access': accessToken,
+    return this.request<string>(
+      '/private/token/upload',
+      {
+        method: 'POST',
+        headers: {
+          'meme-web-access': accessToken,
+        },
+        body: formData,
       },
-      body: formData,
-    });
-
-    const payload = (await response.json()) as FourMemeResponse<string>;
-    return ensureSuccess(payload, '图片上传失败');
+      '图片上传失败',
+    );
   }
 
   async createToken(accessToken: string, body: Record<string, unknown>): Promise<{
     createArg: string;
     signature: string;
   }> {
-    const response = await fetch(`${FOUR_MEME_API_BASE}/private/token/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'meme-web-access': accessToken,
-      },
-      body: JSON.stringify(body),
-    });
-
-    const payload = (await response.json()) as FourMemeResponse<{
+    return this.request<{
       createArg: string;
       signature: string;
-    }>;
-
-    return ensureSuccess(payload, '创建 token 参数失败');
+    }>(
+      '/private/token/create',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'meme-web-access': accessToken,
+        },
+        body: JSON.stringify(body),
+      },
+      '创建 token 参数失败',
+    );
   }
 
   pickRaisedToken(configs: RaisedTokenConfig[], preferredSymbol?: string): RaisedTokenConfig {
@@ -172,6 +178,34 @@ export class FourMemeClient {
       ...(form.twitterUrl ? { twitterUrl: form.twitterUrl } : {}),
       ...(form.telegramUrl ? { telegramUrl: form.telegramUrl } : {}),
     };
+  }
+
+  private async request<T>(path: string, init: RequestInit | undefined, fallback: string): Promise<T> {
+    const response = await this.fetchWithTimeout(`${FOUR_MEME_API_BASE}${path}`, init);
+    if (!response.ok) {
+      throw new Error(`${fallback}: HTTP ${response.status}`);
+    }
+
+    const payload = (await response.json()) as FourMemeResponse<T>;
+    return ensureSuccess(payload, fallback);
+  }
+
+  private async fetchWithTimeout(input: string, init?: RequestInit) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      return await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`请求 four.meme 超时（${this.timeoutMs}ms）`, { cause: error });
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 
