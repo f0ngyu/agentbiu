@@ -6,7 +6,8 @@ import {
 import { tokenLaunchService } from '../services/token-launch-service';
 import { walletSessionService } from '../services/wallet-service';
 import { nft8004Service } from '../services/nft8004-service';
-import { getErrorMessage } from '../lib/errors';
+import { getErrorMessage, getErrorStatus } from '../lib/errors';
+import { readJsonBody } from '../lib/request';
 
 export const systemRoutes = new Hono();
 
@@ -17,7 +18,13 @@ systemRoutes.get('/session', (c) => {
 });
 
 systemRoutes.post('/session/private-key', async (c) => {
-  const body = await c.req.json();
+  const body = await readJsonBody(c.req).catch((error) => {
+    return c.json({ success: false, error: getErrorMessage(error) }, getErrorStatus(error, 500));
+  });
+  if (body instanceof Response) {
+    return body;
+  }
+
   const parsed = privateKeySessionSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.issues[0]?.message || '私钥格式错误' }, 400);
@@ -45,7 +52,13 @@ systemRoutes.get('/verify', async (c) => {
 });
 
 systemRoutes.post('/identity/check', async (c) => {
-  const body = await c.req.json();
+  const body = await readJsonBody(c.req).catch((error) => {
+    return c.json({ success: false, error: getErrorMessage(error) }, getErrorStatus(error, 500));
+  });
+  if (body instanceof Response) {
+    return body;
+  }
+
   const parsed = addressPayloadSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ success: false, error: parsed.error.issues[0]?.message || '地址格式错误' }, 400);
@@ -58,4 +71,3 @@ systemRoutes.post('/identity/check', async (c) => {
     return c.json({ success: false, error: getErrorMessage(error) }, 500);
   }
 });
-

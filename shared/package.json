@@ -6,10 +6,10 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
     "check": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "bun test"
+    "test": "bun test ./src/*.test.ts"
   },
   "dependencies": {
     "viem": "latest",
