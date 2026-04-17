@@ -12,6 +12,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "viem": "latest",
     "zod": "latest"
   },
   "devDependencies": {

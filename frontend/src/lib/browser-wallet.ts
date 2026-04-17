@@ -6,8 +6,11 @@ import {
   BSC_RPC_URL,
   EIP8004_NFT_ADDRESS,
   TOKEN_MANAGER2_ADDRESS,
+  computeRequiredAllowance,
+  extractTokenAddressFromLogs,
+  parseTokenAmount,
 } from '@agentbiu/shared';
-import { createPublicClient, createWalletClient, custom, decodeEventLog, http, parseAbi, parseUnits } from 'viem';
+import { createPublicClient, createWalletClient, custom, http, parseAbi } from 'viem';
 import type { LaunchPreparation } from '@agentbiu/shared';
 import { bsc } from 'viem/chains';
 
@@ -17,7 +20,6 @@ const registerAbi = parseAbi([
 
 const createTokenAbi = parseAbi([
   'function createToken(bytes args, bytes signature) payable',
-  'event TokenCreate(address creator, address token, uint256 requestId, string name, string symbol, uint256 totalSupply, uint256 launchTime, uint256 launchFee)',
   'function _tradingFeeRate() view returns (uint256)',
 ]);
 
@@ -107,8 +109,7 @@ export async function signLoginMessage(address: `0x${string}`, message: string) 
   });
 }
 
-export async function registerIdentityWithBrowser(agentURI: string) {
-  const { address } = await connectBrowserWallet();
+export async function registerIdentityWithBrowser(address: `0x${string}`, agentURI: string) {
   const walletClient = getWalletClient(address);
   const hash = await walletClient.writeContract({
     address: EIP8004_NFT_ADDRESS,
@@ -123,10 +124,10 @@ export async function registerIdentityWithBrowser(agentURI: string) {
 }
 
 export async function createTokenWithBrowser(
+  address: `0x${string}`,
   input: LaunchPreparation,
   preSaleValue: string | number,
 ) {
-  const { address } = await connectBrowserWallet();
   await ensureRaisedTokenApproval(address, input, preSaleValue);
   const walletClient = getWalletClient(address);
   const hash = await walletClient.writeContract({
@@ -142,7 +143,7 @@ export async function createTokenWithBrowser(
   return {
     txHash: hash,
     address,
-    tokenAddress: extractTokenAddress(receipt.logs),
+    tokenAddress: extractTokenAddressFromLogs(receipt.logs),
   };
 }
 
@@ -156,8 +157,6 @@ async function ensureRaisedTokenApproval(
   preSaleValue: string | number,
 ) {
   if (input.selectedRaisedToken.symbol === 'BNB') return;
-  const normalizedPreSaleValue = normalizeDecimalInput(preSaleValue);
-  if (!normalizedPreSaleValue || Number(normalizedPreSaleValue) <= 0) return;
   if (!input.selectedRaisedToken.symbolAddress) {
     throw new Error(`缺少 ${input.selectedRaisedToken.symbol} 合约地址，无法执行授权`);
   }
@@ -183,10 +182,10 @@ async function ensureRaisedTokenApproval(
     }),
   ]);
 
-  const preSaleUnits = parseUnits(normalizedPreSaleValue, Number(decimals));
+  const preSaleUnits = parseTokenAmount(preSaleValue, Number(decimals));
   if (preSaleUnits <= 0n) return;
 
-  const requiredAllowance = preSaleUnits + (preSaleUnits * feeRate) / 10000n;
+  const requiredAllowance = computeRequiredAllowance(preSaleUnits, feeRate);
   if (allowance >= requiredAllowance) return;
 
   const walletClient = getWalletClient(owner);
@@ -198,34 +197,4 @@ async function ensureRaisedTokenApproval(
     account: owner,
   });
   await publicClient.waitForTransactionReceipt({ hash: approveHash });
-}
-
-function normalizeDecimalInput(value: string | number) {
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) return '';
-    return String(value);
-  }
-  return value.trim();
-}
-
-function extractTokenAddress(
-  logs: Array<{ address: string; data: `0x${string}`; topics: readonly `0x${string}`[] }>,
-) {
-  for (const log of logs) {
-    if (log.address.toLowerCase() !== TOKEN_MANAGER2_ADDRESS.toLowerCase()) continue;
-    try {
-      const decoded = decodeEventLog({
-        abi: createTokenAbi,
-        data: log.data,
-        topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
-      });
-      if (decoded.eventName === 'TokenCreate') {
-        return (decoded.args as { token: string }).token;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
 }
