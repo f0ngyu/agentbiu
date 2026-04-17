@@ -210,10 +210,12 @@
 
 <script setup lang="ts">
 import {
+  appendLaunchFormFields,
   BSC_BLOCK_EXPLORER,
   TOKEN_LABELS,
   type IdentityCheckResult,
   type IdentityStatus,
+  type LaunchFormInput,
   type LaunchPreparation,
   type LaunchResult,
   type SessionInfo,
@@ -259,7 +261,7 @@ const errorMessage = ref('');
 const imageFile = ref<File | null>(null);
 const launchResult = ref<LaunchResult | null>(null);
 
-const form = reactive({
+const form = reactive<LaunchFormInput>({
   name: '',
   shortName: '',
   desc: '',
@@ -409,7 +411,7 @@ async function ensureIdentity() {
           description: form.agentDescription,
         },
       );
-      await registerIdentityWithBrowser(prepared.agentURI);
+      await registerIdentityWithBrowser(browserAddress.value as `0x${string}`, prepared.agentURI);
     }
 
     const latest = await apiPostJson<IdentityCheckResult>('/api/identity/check', { address });
@@ -476,7 +478,11 @@ async function submitLaunch() {
         '/api/launch/browser/prepare',
         buildFormData(accessToken),
       );
-      const tx = await createTokenWithBrowser(prepared, form.preSale);
+      const tx = await createTokenWithBrowser(
+        browserAddress.value as `0x${string}`,
+        prepared,
+        form.preSale,
+      );
       launchResult.value = {
         ...prepared,
         txHash: tx.txHash,
@@ -496,19 +502,7 @@ async function submitLaunch() {
 function buildFormData(accessToken?: string) {
   const data = new FormData();
   data.set('image', imageFile.value as File);
-  data.set('name', form.name);
-  data.set('shortName', form.shortName);
-  data.set('desc', form.desc);
-  data.set('label', form.label);
-  data.set('webUrl', form.webUrl);
-  data.set('twitterUrl', form.twitterUrl);
-  data.set('telegramUrl', form.telegramUrl);
-  data.set('preSale', form.preSale);
-  data.set('feePlan', String(form.feePlan));
-  data.set('raisedTokenSymbol', form.raisedTokenSymbol);
-  data.set('agentName', form.agentName);
-  data.set('agentImageUrl', form.agentImageUrl);
-  data.set('agentDescription', form.agentDescription);
+  appendLaunchFormFields(data, form);
   if (accessToken) data.set('accessToken', accessToken);
   return data;
 }

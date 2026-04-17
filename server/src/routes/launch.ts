@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
-import { launchFormSchema } from '@agentbiu/shared';
+import { launchFormSchema, readLaunchFormFields } from '@agentbiu/shared';
 import { tokenLaunchService } from '../services/token-launch-service';
 import { walletSessionService } from '../services/wallet-service';
+import { getErrorMessage } from '../lib/errors';
 
 export const launchRoutes = new Hono();
 
@@ -36,28 +37,14 @@ launchRoutes.post('/browser/prepare', async (c) => {
   }
 });
 
-async function parseLaunchRequest(request: { formData(): Promise<FormData> }) {
+export async function parseLaunchRequest(request: { formData(): Promise<FormData> }) {
   const formData = await request.formData();
   const image = formData.get('image');
   if (!(image instanceof File)) {
     throw new Error('请上传 token 图片');
   }
 
-  const parsed = launchFormSchema.safeParse({
-    name: String(formData.get('name') || ''),
-    shortName: String(formData.get('shortName') || ''),
-    desc: String(formData.get('desc') || ''),
-    label: String(formData.get('label') || 'Meme'),
-    webUrl: String(formData.get('webUrl') || ''),
-    twitterUrl: String(formData.get('twitterUrl') || ''),
-    telegramUrl: String(formData.get('telegramUrl') || ''),
-    preSale: String(formData.get('preSale') || '0'),
-    feePlan: String(formData.get('feePlan') || 'false') === 'true',
-    raisedTokenSymbol: String(formData.get('raisedTokenSymbol') || 'BNB'),
-    agentName: String(formData.get('agentName') || ''),
-    agentImageUrl: String(formData.get('agentImageUrl') || ''),
-    agentDescription: String(formData.get('agentDescription') || ''),
-  });
+  const parsed = launchFormSchema.safeParse(readLaunchFormFields(formData));
 
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message || '表单参数不合法');
@@ -68,8 +55,4 @@ async function parseLaunchRequest(request: { formData(): Promise<FormData> }) {
     image,
     accessToken: String(formData.get('accessToken') || ''),
   };
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '未知错误';
 }

@@ -6,6 +6,7 @@ import {
 import { tokenLaunchService } from '../services/token-launch-service';
 import { walletSessionService } from '../services/wallet-service';
 import { nft8004Service } from '../services/nft8004-service';
+import { getErrorMessage } from '../lib/errors';
 
 export const systemRoutes = new Hono();
 
@@ -58,6 +59,3 @@ systemRoutes.post('/identity/check', async (c) => {
   }
 });
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '未知错误';
-}
