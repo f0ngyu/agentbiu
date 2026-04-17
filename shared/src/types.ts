@@ -12,6 +12,7 @@ export interface RaisedTokenConfig {
   totalAmount?: string | number;
   saleRate?: string | number;
   status?: string;
+  logoUrl?: string;
   iconUrl?: string;
 }
 
