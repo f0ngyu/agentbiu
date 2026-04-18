@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { OFFICIAL_RAISED_TOKENS } from '@agentbiu/shared';
 import { FourMemeClient } from './fourmeme-client';
 
 const originalFetch = globalThis.fetch;
@@ -17,22 +18,25 @@ describe('FourMemeClient', () => {
       return new Response(
         JSON.stringify({
           code: 0,
-        data: [
-          { symbol: 'USDT', status: 'PUBLISH' },
-          { symbol: 'BNB', status: 'PUBLISH' },
-          { symbol: '币安人生', status: 'PUBLISH' },
-          { symbol: 'UNKNOWN', status: 'PUBLISH' },
-        ],
-      }),
-    );
+          data: [
+            { symbol: 'USDT', status: 'PUBLISH' },
+            { symbol: 'BNB', status: 'PUBLISH' },
+            { symbol: '币安人生', status: 'PUBLISH' },
+            { symbol: 'UNKNOWN', status: 'PUBLISH' },
+          ],
+        }),
+      );
     }) as unknown as typeof fetch;
 
     const client = new FourMemeClient(20);
-    await expect(client.fetchPublicConfig()).resolves.toEqual([
+    const result = await client.fetchPublicConfig();
+
+    expect(result).toEqual([
       { symbol: 'BNB', status: 'PUBLISH' },
       { symbol: 'USDT', status: 'PUBLISH' },
       { symbol: '币安人生', status: 'PUBLISH' },
     ]);
+    expect(result.every((token) => OFFICIAL_RAISED_TOKENS.includes(token.symbol as (typeof OFFICIAL_RAISED_TOKENS)[number]))).toBe(true);
   });
 
   test('throws HTTP status errors', async () => {

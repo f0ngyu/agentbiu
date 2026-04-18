@@ -10,6 +10,10 @@ describe('hex helpers', () => {
     expect(normalizeHex('YQ==', { allowBase64: true })).toBe('0x61');
   });
 
+  test('rejects empty input even when base64 is allowed', () => {
+    expect(() => normalizeHex('', { allowBase64: true })).toThrow('十六进制字符串不能为空');
+  });
+
   test('rejects invalid hex input when base64 is not allowed', () => {
     expect(() => normalizeHex('not-a-hex')).toThrow('十六进制字符串格式错误');
   });

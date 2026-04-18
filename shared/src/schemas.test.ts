@@ -26,6 +26,16 @@ describe('launchFormSchema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  test('defaults preSale to 0 when omitted', () => {
+    const parsed = launchFormSchema.safeParse({
+      ...buildValidPayload(),
+      preSale: undefined,
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.preSale).toBe('0');
+  });
+
   test('rejects invalid symbol length', () => {
     const parsed = launchFormSchema.safeParse({
       ...buildValidPayload(),

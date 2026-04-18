@@ -3,11 +3,11 @@ import {
   tokenManagerAbi,
   BSC_CHAIN_ID,
   BSC_CHAIN_NAME,
+  type TokenReceiptLog,
   type LaunchFormInput,
   type LaunchPreparation,
   type LaunchResult,
   type RaisedTokenConfig,
-  type TokenReceiptLog,
   type VerificationInfo,
   TOKEN_MANAGER2_ADDRESS,
   computeCreationFeeWei,
@@ -19,8 +19,8 @@ import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { bsc } from 'viem/chains';
 import { appEnv } from '../lib/env';
-import { fourMemeClient } from './fourmeme-client';
-import { nft8004Service } from './nft8004-service';
+import { fourMemeClient, type FourMemeClient } from './fourmeme-client';
+import { nft8004Service, type Nft8004Service } from './nft8004-service';
 import { normalizeHex } from '../lib/hex';
 
 export function extractLaunchedTokenAddress(logs: TokenReceiptLog[]) {
@@ -46,14 +46,101 @@ export function computeLaunchCreationFee(
   return computeCreationFeeWei(launchFee, raisedSymbol, preSaleValue, tradingFeeRate);
 }
 
+type TokenLaunchReadContractArgs =
+  | {
+      address: `0x${string}`;
+      abi: typeof tokenManagerAbi;
+      functionName: '_launchFee' | '_tradingFeeRate';
+    }
+  | {
+      address: `0x${string}`;
+      abi: typeof erc20Abi;
+      functionName: 'decimals';
+    }
+  | {
+      address: `0x${string}`;
+      abi: typeof erc20Abi;
+      functionName: 'allowance';
+      args: [`0x${string}`, `0x${string}`];
+    };
+
+type TokenLaunchWriteContractArgs =
+  | {
+      address: `0x${string}`;
+      abi: typeof tokenManagerAbi;
+      functionName: 'createToken';
+      args: [`0x${string}`, `0x${string}`];
+      value: bigint;
+    }
+  | {
+      address: `0x${string}`;
+      abi: typeof erc20Abi;
+      functionName: 'approve';
+      args: [`0x${string}`, bigint];
+    };
+
+export type TokenLaunchPublicClient = {
+  readContract(args: TokenLaunchReadContractArgs): Promise<bigint | number>;
+  waitForTransactionReceipt(args: { hash: `0x${string}` }): Promise<{
+    status: string;
+    logs: TokenReceiptLog[];
+  }>;
+};
+
+export type TokenLaunchWalletClient = {
+  writeContract(args: TokenLaunchWriteContractArgs): Promise<`0x${string}`>;
+};
+
+export type TokenLaunchFourMemeClient = Pick<
+  FourMemeClient,
+  'fetchPublicConfig' | 'generateNonce' | 'loginWithSignature' | 'uploadImage' | 'createToken' | 'pickRaisedToken' | 'buildCreateBody'
+>;
+
+export type TokenLaunchNft8004Service = Pick<Nft8004Service, 'ensureIdentity'>;
+
+export type TokenLaunchServiceDeps = {
+  publicClient?: TokenLaunchPublicClient;
+  walletClientFactory?: (account: ReturnType<typeof privateKeyToAccount>) => TokenLaunchWalletClient;
+  fourMemeClient?: TokenLaunchFourMemeClient;
+  nft8004Service?: TokenLaunchNft8004Service;
+};
+
 export class TokenLaunchService {
-  private publicClient = createPublicClient({
-    chain: bsc,
-    transport: http(appEnv.bscRpcUrl),
-  });
+  private readonly publicClient: TokenLaunchPublicClient;
+  private readonly walletClientFactory: (account: ReturnType<typeof privateKeyToAccount>) => TokenLaunchWalletClient;
+  private readonly fourMemeClient: TokenLaunchFourMemeClient;
+  private readonly nft8004Service: TokenLaunchNft8004Service;
+
+  constructor(deps: TokenLaunchServiceDeps = {}) {
+    this.publicClient =
+      deps.publicClient ??
+      (createPublicClient({
+        chain: bsc,
+        transport: http(appEnv.bscRpcUrl),
+      }) as unknown as TokenLaunchPublicClient);
+    this.walletClientFactory =
+      deps.walletClientFactory ??
+      ((account) => {
+        const client = createWalletClient({
+          account,
+          chain: bsc,
+          transport: http(appEnv.bscRpcUrl),
+        });
+        return {
+          writeContract: (args) =>
+            client.writeContract({
+              ...args,
+              account,
+              chain: bsc,
+            } as never),
+        };
+      });
+    this.fourMemeClient = deps.fourMemeClient ?? fourMemeClient;
+    this.nft8004Service = deps.nft8004Service ?? nft8004Service;
+  }
 
   async getVerificationInfo(hasPrivateKey: boolean): Promise<VerificationInfo> {
-    const raisedTokens = await fourMemeClient.fetchPublicConfig();
+    const raisedTokens = await this.fourMemeClient.fetchPublicConfig();
     return {
       networkName: BSC_CHAIN_NAME,
       chainId: BSC_CHAIN_ID,
@@ -66,9 +153,9 @@ export class TokenLaunchService {
 
   async loginWithPrivateKey(privateKey: `0x${string}`) {
     const account = privateKeyToAccount(privateKey);
-    const nonceInfo = await fourMemeClient.generateNonce(account.address);
+    const nonceInfo = await this.fourMemeClient.generateNonce(account.address);
     const signature = await account.signMessage({ message: nonceInfo.message });
-    const login = await fourMemeClient.loginWithSignature({
+    const login = await this.fourMemeClient.loginWithSignature({
       address: account.address,
       signature,
     });
@@ -86,14 +173,14 @@ export class TokenLaunchService {
     feeInfo?: { launchFee: bigint; tradingFeeRate: bigint },
   ): Promise<LaunchPreparation> {
     console.info('[launch] reading raised token config');
-    const raisedTokens = await fourMemeClient.fetchPublicConfig();
-    const selectedRaisedToken = fourMemeClient.pickRaisedToken(raisedTokens, form.raisedTokenSymbol);
+    const raisedTokens = await this.fourMemeClient.fetchPublicConfig();
+    const selectedRaisedToken = this.fourMemeClient.pickRaisedToken(raisedTokens, form.raisedTokenSymbol);
     console.info(`[launch] selected raised token: ${selectedRaisedToken.symbol}`);
     console.info('[launch] uploading token image');
-    const imageUrl = await fourMemeClient.uploadImage(image, accessToken);
+    const imageUrl = await this.fourMemeClient.uploadImage(image, accessToken);
     console.info('[launch] creating four.meme createArg/signature');
-    const createBody = fourMemeClient.buildCreateBody(form, imageUrl, selectedRaisedToken);
-    const response = await fourMemeClient.createToken(accessToken, createBody);
+    const createBody = this.fourMemeClient.buildCreateBody(form, imageUrl, selectedRaisedToken);
+    const response = await this.fourMemeClient.createToken(accessToken, createBody);
     const { launchFee, tradingFeeRate } = feeInfo ?? (await this.readLaunchFees());
     const creationFeeWei = this.computeCreationFee(
       launchFee,
@@ -103,8 +190,8 @@ export class TokenLaunchService {
     );
 
     return {
-      createArg: normalizeHex(response.createArg),
-      signature: normalizeHex(response.signature),
+      createArg: normalizeHex(response.createArg, { allowBase64: true }),
+      signature: normalizeHex(response.signature, { allowBase64: true }),
       creationFeeWei,
       accessToken,
       uploadImageUrl: imageUrl,
@@ -121,7 +208,7 @@ export class TokenLaunchService {
     const { account, accessToken } = await this.loginWithPrivateKey(privateKey);
     console.info(`[launch] logged in as ${account.address}`);
     console.info('[launch] checking or registering 8004 identity');
-    await nft8004Service.ensureIdentity(account.address, privateKey, {
+    await this.nft8004Service.ensureIdentity(account.address, privateKey, {
       agentName: form.agentName,
       imageUrl: form.agentImageUrl,
       description: form.agentDescription,
@@ -129,11 +216,7 @@ export class TokenLaunchService {
 
     const feeInfo = await this.readLaunchFees();
     const preparation = await this.prepareLaunchWithAccessToken(accessToken, form, image, feeInfo);
-    const walletClient = createWalletClient({
-      account,
-      chain: bsc,
-      transport: http(appEnv.bscRpcUrl),
-    });
+    const walletClient = this.walletClientFactory(account);
     await this.ensureRaisedTokenApproval(
       walletClient,
       account.address,
@@ -164,7 +247,7 @@ export class TokenLaunchService {
   }
 
   private async ensureRaisedTokenApproval(
-    walletClient: ReturnType<typeof createWalletClient>,
+    walletClient: TokenLaunchWalletClient,
     owner: `0x${string}`,
     raisedToken: RaisedTokenConfig,
     preSaleValue: string,
@@ -193,15 +276,13 @@ export class TokenLaunchService {
 
     const requiredAllowance = computeLaunchRequiredAllowance(preSaleValue, Number(decimals), feeRate);
     if (requiredAllowance <= 0n) return;
-    if (allowance >= requiredAllowance) {
+    if (BigInt(allowance) >= requiredAllowance) {
       console.info(`[launch] ${raisedToken.symbol} allowance already sufficient`);
       return;
     }
 
     console.info(`[launch] approving ${raisedToken.symbol} for createToken flow`);
     const approveHash = await walletClient.writeContract({
-      chain: bsc,
-      account: owner,
       address: tokenAddress,
       abi: erc20Abi,
       functionName: 'approve',
@@ -238,7 +319,7 @@ export class TokenLaunchService {
       }),
     ]);
 
-    return { launchFee, tradingFeeRate };
+    return { launchFee: BigInt(launchFee), tradingFeeRate: BigInt(tradingFeeRate) };
   }
 }
 

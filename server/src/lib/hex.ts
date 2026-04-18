@@ -4,6 +4,9 @@ type NormalizeHexOptions = {
 
 export function normalizeHex(value: string, options: NormalizeHexOptions = {}): `0x${string}` {
   const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error('十六进制字符串不能为空');
+  }
   if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) {
     return `0x${trimmed.slice(2)}` as `0x${string}`;
   }

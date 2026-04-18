@@ -12,30 +12,37 @@ import { bsc } from 'viem/chains';
 import { appEnv } from '../lib/env';
 
 type Nft8004ReceiptLog = {
-  address: string;
+  address: `0x${string}`;
   data: `0x${string}`;
   topics: readonly `0x${string}`[];
 };
 
-type Nft8004PublicClient = {
-  readContract(args: {
-    address: `0x${string}`;
-    abi: typeof nft8004Abi;
-    functionName: 'balanceOf';
-    args: [`0x${string}`];
-  }): Promise<bigint>;
-  waitForTransactionReceipt(args: { hash: `0x${string}` }): Promise<{
-    logs: Nft8004ReceiptLog[];
-  }>;
+type Nft8004ReadContractArgs = {
+  address: `0x${string}`;
+  abi: typeof nft8004Abi;
+  functionName: 'balanceOf';
+  args: [`0x${string}`];
 };
 
-type Nft8004WalletClient = {
-  writeContract(args: {
-    address: `0x${string}`;
-    abi: typeof nft8004Abi;
-    functionName: 'register';
-    args: [string];
-  }): Promise<`0x${string}`>;
+type Nft8004WaitForReceiptArgs = {
+  hash: `0x${string}`;
+};
+
+type Nft8004WriteContractArgs = {
+  chain?: typeof bsc;
+  address: `0x${string}`;
+  abi: typeof nft8004Abi;
+  functionName: 'register';
+  args: [string];
+};
+
+export type Nft8004PublicClient = {
+  readContract(args: Nft8004ReadContractArgs): Promise<bigint>;
+  waitForTransactionReceipt(args: Nft8004WaitForReceiptArgs): Promise<{ logs: Nft8004ReceiptLog[] }>;
+};
+
+export type Nft8004WalletClient = {
+  writeContract(args: Nft8004WriteContractArgs): Promise<`0x${string}`>;
 };
 
 type Nft8004ServiceDeps = {
@@ -50,18 +57,27 @@ export class Nft8004Service {
   constructor(deps: Nft8004ServiceDeps = {}) {
     this.publicClient =
       deps.publicClient ??
-      (createPublicClient({
+      createPublicClient({
         chain: bsc,
         transport: http(appEnv.bscRpcUrl),
-      }) as unknown as Nft8004PublicClient);
+      });
     this.walletClientFactory =
       deps.walletClientFactory ??
-      ((account) =>
-        createWalletClient({
+      ((account) => {
+        const client = createWalletClient({
           account,
           chain: bsc,
           transport: http(appEnv.bscRpcUrl),
-        }) as unknown as Nft8004WalletClient);
+        });
+        return {
+          writeContract: (args) =>
+            client.writeContract({
+              ...args,
+              account,
+              chain: bsc,
+            }),
+        };
+      });
   }
 
   async check(address: string): Promise<IdentityCheckResult> {
@@ -105,6 +121,7 @@ export class Nft8004Service {
     });
 
     const txHash = await walletClient.writeContract({
+      chain: bsc,
       address: appEnv.eip8004Address as `0x${string}`,
       abi: nft8004Abi,
       functionName: 'register',
@@ -114,7 +131,7 @@ export class Nft8004Service {
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash: txHash });
     let agentId: number | null = null;
 
-    for (const log of receipt.logs) {
+    for (const log of receipt.logs as Nft8004ReceiptLog[]) {
       if (log.address.toLowerCase() !== appEnv.eip8004Address.toLowerCase()) continue;
       try {
         const decoded = decodeEventLog({
