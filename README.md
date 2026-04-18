@@ -1,23 +1,115 @@
 # AgentBIU
 
-面向 four.meme 的本地一键发币 WebUI。使用 `bun` 管理，前端基于 `Vue 3 + Vite`，服务端基于 `Bun + Hono`，不依赖 Cursor 或 OpenClaw。
+一个给普通用户直接用的 four.meme 发币工具。
 
-## 当前能力
+## 先看这个
 
-- 私钥模式发币
-- 浏览器钱包模式发币
-- 8004 NFT 检查
-- 无 8004 时自动申请
-- four.meme create-api / create-chain 流程封装
-- BSC 环境与 raised token 基础校验
+如果你只是想把 token 发出去，不需要懂开发流程，按下面做就行：
 
-## 环境要求
+1. 下载对应系统的发布包
+2. 打开程序
+3. 连接钱包
+4. 填写 token 信息并上传图片
+5. 点击创建，按钱包提示确认
+
+## 怎么安装
+
+### 方式一：下载发布包
+
+推荐普通用户使用。
+
+1. 打开 [GitHub Releases](https://github.com/f0ngyu/agentbiu/releases)
+2. 下载对应系统的压缩包
+3. 解压后运行：
+   - macOS: 双击 `start.command`
+   - Windows: 双击 `start.bat`
+
+首次启动时，程序会自动准备本地配置文件并打开页面。
+
+### 方式二：本地运行源码
+
+如果你想自己跑最新版源码，可以看下面的开发者部分。
+
+## 怎么使用
+
+### 1. 连接钱包
+
+- 浏览器钱包模式适合大多数人，例如 MetaMask、OKX Wallet
+- 私钥模式适合本地测试或自动化
+
+### 2. 填写发币信息
+
+你需要准备：
+
+- Token 图片
+- Token 名称
+- Token 符号
+- 描述
+- 网站、Twitter、Telegram（可选）
+
+### 3. 选择底池
+
+常见底池包括 `BNB`、`USDT`、`USDC` 等。
+
+- 选 `BNB`：只需要准备少量 BNB 作为 gas
+- 选其他币：钱包里还要有对应币种余额，发币前可能先做授权
+
+### 4. 检查并创建
+
+程序会先检查：
+
+- 钱包是否可用
+- 当前地址是否有 `8004` 凭证
+- 图片和表单是否完整
+
+然后再提交发币交易。
+
+### 5. 查看结果
+
+成功后你会看到：
+
+- `CA` 地址
+- 交易哈希
+- 钱包地址
+- 创建费用
+
+也可以直接跳到 `BscScan` 查看交易。
+
+## 使用前准备
+
+- 一个支持 BSC 的浏览器钱包
+- 少量 `BNB`
+- 如果选非 BNB 底池，还需要对应底池币
+- 一张 token 图片
+
+## 常见问题
+
+### 只看到交易哈希，没有看到 CA
+
+系统会优先从链上回执解析 `TokenCreate` 事件。偶发没显示时，可以直接去 `BscScan` 查同一笔交易。
+
+### 浏览器没自动打开
+
+手动访问本地地址即可：
+
+- 开发模式：`http://127.0.0.1:5173`
+- 生产模式：`http://127.0.0.1:3000`
+
+### 怎么停止
+
+- macOS：双击 `stop.command`
+- Windows：双击 `stop.bat`
+
+更多普通用户说明见 [docs/user-guide.md](docs/user-guide.md)。
+
+## 给开发者
+
+### 环境要求
 
 - `bun >= 1.3`
-- 浏览器钱包插件（如 MetaMask），用于浏览器钱包模式
-- BSC RPC 可选，不填则使用默认公共节点
+- Node.js 不需要单独安装
 
-## 快速开始
+### 本地开发
 
 ```bash
 bun install
@@ -26,92 +118,43 @@ bun run doctor
 bun run dev
 ```
 
-前端会默认打开 `http://127.0.0.1:5173`，并代理到本地 API `http://127.0.0.1:3000`。
+前端默认会运行在 `http://127.0.0.1:5173`，后端默认是 `http://127.0.0.1:3000`。
 
-## .env 说明
-
-```bash
-PORT=3000
-BSC_RPC_URL=https://bsc-dataseed.binance.org
-# PRIVATE_KEY=0xyour_private_key_here
-```
-
-- `PRIVATE_KEY` 可选。如果不填，可以在 WebUI 中临时输入私钥，或直接切换到浏览器钱包模式。
-- `.env` 不要提交到仓库。
-
-## 常用命令
+### 常用命令
 
 ```bash
 bun run dev
-bun run start:prod
 bun run check
-bun run build
 bun run test
-bun run package:macos
+bun run build
+bun run start:prod
 ```
 
-## 生产启动
+### 打包发布
 
-先构建，再由服务端直接托管前端静态页面：
+```bash
+bun run package:macos
+bun run package:windows
+```
+
+### 生产启动
 
 ```bash
 bun run build
 bun run start:prod
 ```
 
-默认访问：
+### 版本发布
 
-- `http://127.0.0.1:3000`
-
-## GitHub Actions 发布
-
-推送以 `v` 开头的 tag（例如 `v0.1.0`）会触发 [Release 工作流](.github/workflows/release.yml)，自动构建并上传：
-
-- `AgentBIU-macos.zip`：解压后双击 `start.command`
-- `AgentBIU-windows.zip`：解压后双击 `start.bat`
-
-在仓库 **Actions** 里也可手动运行同一工作流（不上传 Release，仅保留本次运行的 Artifacts）。
-
-## macOS 打包
-
-生成面向普通用户的发布包：
+推送以 `v` 开头的 tag 会触发 GitHub Actions Release，例如：
 
 ```bash
-bun run package:macos
+git tag v0.1.5
+git push origin v0.1.5
 ```
-
-打包完成后会输出到：
-
-- `release/AgentBIU-macos`
-
-普通用户只需要双击：
-
-- `start.command`
-
-停止时双击：
-
-- `stop.command`
-
-## 钱包模式
-
-### 私钥模式
-
-- 服务端在本地运行时会话中管理私钥
-- 发币时会自动执行 8004 检查与申请
-- 更适合批量或脚本化本地操作
-
-### 浏览器钱包模式
-
-- 前端通过 EIP-1193 钱包插件连接
-- 登录签名、8004 申请、发币交易都由钱包弹窗确认
-- 更适合普通用户按步骤点击操作
 
 ## 参考资料
 
 - [Four.meme Agentic 页面](https://four.meme/en/agentic)
 - [Four.meme Protocol Integration](https://four-meme.gitbook.io/four.meme/protocol-integration)
 - [@four-meme/four-meme-ai npm 文档](https://www.npmjs.com/package/@four-meme/four-meme-ai)
-
-## Python 约定
-
-当前项目不依赖 Python。如果后续需要引入 Python 脚本或工具链，统一使用 `uv` 管理。
