@@ -253,9 +253,9 @@
               <h3>底池</h3>
             </div>
 
-            <div v-if="raisedTokens.length" class="token-grid">
+            <div v-if="orderedRaisedTokens.length" class="token-grid">
               <button
-                v-for="token in raisedTokens"
+                v-for="token in orderedRaisedTokens"
                 :key="token.symbol"
                 type="button"
                 class="token-card"
@@ -378,6 +378,7 @@
 import {
   appendLaunchFormFields,
   BSC_BLOCK_EXPLORER,
+  OFFICIAL_RAISED_TOKENS,
   type IdentityCheckResult,
   type IdentityStatus,
   type LaunchFormInput,
@@ -411,6 +412,10 @@ const sessionInfo = ref<SessionInfo>({
 });
 const verification = ref<VerificationInfo | null>(null);
 const raisedTokens = computed(() => verification.value?.raisedTokens || []);
+const raisedTokenOrder = Object.fromEntries(
+  OFFICIAL_RAISED_TOKENS.map((symbol, index) => [symbol, index]),
+) as Record<(typeof OFFICIAL_RAISED_TOKENS)[number], number>;
+const orderedRaisedTokens = computed(() => sortRaisedTokens(raisedTokens.value));
 
 const browserAddress = ref<string | null>(null);
 const browserChainId = ref<number | null>(null);
@@ -453,7 +458,7 @@ const currentAddress = computed(() =>
 );
 
 const selectedRaisedToken = computed(() => {
-  const options = raisedTokens.value;
+  const options = orderedRaisedTokens.value;
   return options.find((item) => item.symbol === form.raisedTokenSymbol) || options[0] || null;
 });
 
@@ -485,8 +490,9 @@ async function reloadBootstrap() {
     sessionInfo.value = session;
     verification.value = verify;
 
-    if (verify.raisedTokens[0] && !verify.raisedTokens.some((item) => item.symbol === form.raisedTokenSymbol)) {
-      form.raisedTokenSymbol = verify.raisedTokens[0].symbol;
+    const firstRaisedToken = sortRaisedTokens(verify.raisedTokens)[0];
+    if (firstRaisedToken && !verify.raisedTokens.some((item) => item.symbol === form.raisedTokenSymbol)) {
+      form.raisedTokenSymbol = firstRaisedToken.symbol;
     }
   } catch (error) {
     setError(error);
@@ -733,6 +739,20 @@ function shortAddress(value: string | null | undefined) {
   if (!value) return '未连接';
   if (value.length <= 12) return value;
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
+function sortRaisedTokens(tokens: VerificationInfo['raisedTokens']) {
+  return [...tokens].sort((left, right) => {
+    const leftIndex = getRaisedTokenRank(left.symbol);
+    const rightIndex = getRaisedTokenRank(right.symbol);
+    return leftIndex - rightIndex;
+  });
+}
+
+function getRaisedTokenRank(symbol: string) {
+  return symbol in raisedTokenOrder
+    ? raisedTokenOrder[symbol as keyof typeof raisedTokenOrder]
+    : Number.POSITIVE_INFINITY;
 }
 
 function clearMessages(clearResult = true) {

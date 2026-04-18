@@ -38,6 +38,7 @@ export const OFFICIAL_RAISED_TOKENS = [
   'ASTER',
   'U',
   'USDC',
+  '币安人生',
 ] as const;
 
 export const RAISED_TOKEN_PREFERENCE = OFFICIAL_RAISED_TOKENS;

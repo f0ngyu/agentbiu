@@ -17,19 +17,21 @@ describe('FourMemeClient', () => {
       return new Response(
         JSON.stringify({
           code: 0,
-          data: [
-            { symbol: 'USDT', status: 'PUBLISH' },
-            { symbol: 'BNB', status: 'PUBLISH' },
-            { symbol: 'UNKNOWN', status: 'PUBLISH' },
-          ],
-        }),
-      );
+        data: [
+          { symbol: 'USDT', status: 'PUBLISH' },
+          { symbol: 'BNB', status: 'PUBLISH' },
+          { symbol: '币安人生', status: 'PUBLISH' },
+          { symbol: 'UNKNOWN', status: 'PUBLISH' },
+        ],
+      }),
+    );
     }) as unknown as typeof fetch;
 
     const client = new FourMemeClient(20);
     await expect(client.fetchPublicConfig()).resolves.toEqual([
       { symbol: 'BNB', status: 'PUBLISH' },
       { symbol: 'USDT', status: 'PUBLISH' },
+      { symbol: '币安人生', status: 'PUBLISH' },
     ]);
   });
 
