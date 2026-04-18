@@ -1,22 +1,16 @@
 import { Hono } from 'hono';
 import { addressPayloadSchema, walletLoginSchema } from '@agentbiu/shared';
 import { fourMemeClient } from '../services/fourmeme-client';
-import { getErrorMessage, getErrorStatus } from '../lib/errors';
+import { getErrorMessage, zodErrorMessage } from '../lib/errors';
 import { readJsonBody } from '../lib/request';
 
 export const walletRoutes = new Hono();
 
 walletRoutes.post('/nonce', async (c) => {
-  const body = await readJsonBody(c.req).catch((error) => {
-    return c.json({ success: false, error: getErrorMessage(error) }, getErrorStatus(error, 500));
-  });
-  if (body instanceof Response) {
-    return body;
-  }
-
+  const body = await readJsonBody(c.req);
   const parsed = addressPayloadSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: parsed.error.issues[0]?.message || '地址格式错误' }, 400);
+    return c.json({ success: false, error: zodErrorMessage(parsed.error, '地址格式错误') }, 400);
   }
 
   try {
@@ -29,16 +23,10 @@ walletRoutes.post('/nonce', async (c) => {
 });
 
 walletRoutes.post('/login', async (c) => {
-  const body = await readJsonBody(c.req).catch((error) => {
-    return c.json({ success: false, error: getErrorMessage(error) }, getErrorStatus(error, 500));
-  });
-  if (body instanceof Response) {
-    return body;
-  }
-
+  const body = await readJsonBody(c.req);
   const parsed = walletLoginSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: parsed.error.issues[0]?.message || '登录参数不完整' }, 400);
+    return c.json({ success: false, error: zodErrorMessage(parsed.error, '登录参数不完整') }, 400);
   }
 
   try {

@@ -1,23 +1,15 @@
 import {
+  nft8004Abi,
   buildAgentURI,
   type BrowserIdentityPreparation,
   type IdentityCheckResult,
   type RegisterIdentityRequest,
   type RegisterIdentityResult,
 } from '@agentbiu/shared';
-import { createPublicClient, createWalletClient, decodeEventLog, http, parseAbi } from 'viem';
+import { createPublicClient, createWalletClient, decodeEventLog, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { bsc } from 'viem/chains';
 import { appEnv } from '../lib/env';
-
-const balanceAbi = parseAbi([
-  'function balanceOf(address owner) view returns (uint256)',
-]);
-
-const registerAbi = parseAbi([
-  'function register(string agentURI) returns (uint256 agentId)',
-  'event Registered(uint256 indexed agentId, string agentURI, address indexed owner)',
-]);
 
 export class Nft8004Service {
   private publicClient = createPublicClient({
@@ -28,7 +20,7 @@ export class Nft8004Service {
   async check(address: string): Promise<IdentityCheckResult> {
     const balance = await this.publicClient.readContract({
       address: appEnv.eip8004Address as `0x${string}`,
-      abi: balanceAbi,
+      abi: nft8004Abi,
       functionName: 'balanceOf',
       args: [address as `0x${string}`],
     });
@@ -71,7 +63,7 @@ export class Nft8004Service {
 
     const txHash = await walletClient.writeContract({
       address: appEnv.eip8004Address as `0x${string}`,
-      abi: registerAbi,
+      abi: nft8004Abi,
       functionName: 'register',
       args: [agentURI],
     });
@@ -83,7 +75,7 @@ export class Nft8004Service {
       if (log.address.toLowerCase() !== appEnv.eip8004Address.toLowerCase()) continue;
       try {
         const decoded = decodeEventLog({
-          abi: registerAbi,
+          abi: nft8004Abi,
           data: log.data,
           topics: log.topics,
         });

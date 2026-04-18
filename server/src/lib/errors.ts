@@ -1,3 +1,5 @@
+import { ZodError } from 'zod';
+
 export class HttpError extends Error {
   constructor(
     public readonly status: number,
@@ -10,6 +12,10 @@ export class HttpError extends Error {
 
 export function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '未知错误';
+}
+
+export function zodErrorMessage(error: ZodError, fallback = '参数错误'): string {
+  return error.issues[0]?.message || fallback;
 }
 
 export type ApiErrorStatus = 400 | 403 | 500;

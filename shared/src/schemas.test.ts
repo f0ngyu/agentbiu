@@ -41,4 +41,44 @@ describe('launchFormSchema', () => {
 
     expect(parsed.success).toBe(false);
   });
+
+  test('rejects overlong name', () => {
+    const parsed = launchFormSchema.safeParse({
+      name: 'A'.repeat(41),
+      shortName: 'BIU',
+      desc: 'hello',
+      label: 'Meme',
+      webUrl: '',
+      twitterUrl: '',
+      telegramUrl: '',
+      preSale: '0',
+      feePlan: false,
+      raisedTokenSymbol: 'BNB',
+      agentName: 'Agent BIU',
+      agentImageUrl: '',
+      agentDescription: '',
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test('rejects invalid label and URL', () => {
+    const parsed = launchFormSchema.safeParse({
+      name: 'Agent BIU',
+      shortName: 'BIU',
+      desc: 'hello',
+      label: 'Invalid',
+      webUrl: 'not-a-url',
+      twitterUrl: '',
+      telegramUrl: '',
+      preSale: '0',
+      feePlan: false,
+      raisedTokenSymbol: 'BNB',
+      agentName: 'Agent BIU',
+      agentImageUrl: '',
+      agentDescription: '',
+    });
+
+    expect(parsed.success).toBe(false);
+  });
 });
