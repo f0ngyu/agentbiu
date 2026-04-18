@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { walletSessionService } from '../services/wallet-service';
 import { nft8004Service } from '../services/nft8004-service';
-import { getErrorMessage, getErrorStatus } from '../lib/errors';
+import { getErrorMessage, zodErrorMessage } from '../lib/errors';
 import { readJsonBody } from '../lib/request';
 
 const requestSchema = z.object({
@@ -14,16 +14,10 @@ const requestSchema = z.object({
 export const identityRoutes = new Hono();
 
 identityRoutes.post('/register/private-key', async (c) => {
-  const body = await readJsonBody(c.req).catch((error) => {
-    return c.json({ success: false, error: getErrorMessage(error) }, getErrorStatus(error, 500));
-  });
-  if (body instanceof Response) {
-    return body;
-  }
-
+  const body = await readJsonBody(c.req);
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: parsed.error.issues[0]?.message || '参数错误' }, 400);
+    return c.json({ success: false, error: zodErrorMessage(parsed.error) }, 400);
   }
 
   const privateKey = walletSessionService.getPrivateKey();
@@ -41,16 +35,10 @@ identityRoutes.post('/register/private-key', async (c) => {
 });
 
 identityRoutes.post('/register/browser/prepare', async (c) => {
-  const body = await readJsonBody(c.req).catch((error) => {
-    return c.json({ success: false, error: getErrorMessage(error) }, getErrorStatus(error, 500));
-  });
-  if (body instanceof Response) {
-    return body;
-  }
-
+  const body = await readJsonBody(c.req);
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, error: parsed.error.issues[0]?.message || '参数错误' }, 400);
+    return c.json({ success: false, error: zodErrorMessage(parsed.error) }, 400);
   }
 
   try {

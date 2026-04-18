@@ -1,11 +1,7 @@
 import type { SessionInfo } from '@agentbiu/shared';
 import { privateKeyToAccount } from 'viem/accounts';
 import { appEnv } from '../lib/env';
-
-function normalizePrivateKey(privateKey: string): `0x${string}` {
-  const trimmed = privateKey.trim();
-  return (trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`) as `0x${string}`;
-}
+import { normalizePrivateKey } from '../lib/hex';
 
 class WalletSessionService {
   private sessionPrivateKey: `0x${string}` | null = null;

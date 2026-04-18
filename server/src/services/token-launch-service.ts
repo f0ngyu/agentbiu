@@ -1,4 +1,6 @@
 import {
+  erc20Abi,
+  tokenManagerAbi,
   BSC_CHAIN_ID,
   BSC_CHAIN_NAME,
   type LaunchFormInput,
@@ -13,33 +15,13 @@ import {
   extractTokenAddressFromLogs,
   parseTokenAmount,
 } from '@agentbiu/shared';
-import { createPublicClient, createWalletClient, http, parseAbi } from 'viem';
+import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { bsc } from 'viem/chains';
 import { appEnv } from '../lib/env';
 import { fourMemeClient } from './fourmeme-client';
 import { nft8004Service } from './nft8004-service';
-
-const readAbi = parseAbi([
-  'function _launchFee() view returns (uint256)',
-  'function _tradingFeeRate() view returns (uint256)',
-]);
-
-const erc20Abi = parseAbi([
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)',
-  'function decimals() view returns (uint8)',
-]);
-
-const writeAbi = parseAbi([
-  'function createToken(bytes args, bytes signature) payable',
-]);
-
-function normalizeHex(value: string): `0x${string}` {
-  if (value.startsWith('0x')) return value as `0x${string}`;
-  if (/^[0-9a-fA-F]+$/.test(value)) return `0x${value}` as `0x${string}`;
-  return `0x${Buffer.from(value, 'base64').toString('hex')}` as `0x${string}`;
-}
+import { normalizeHex } from '../lib/hex';
 
 export function extractLaunchedTokenAddress(logs: TokenReceiptLog[]) {
   return extractTokenAddressFromLogs(logs);
@@ -101,6 +83,7 @@ export class TokenLaunchService {
     accessToken: string,
     form: LaunchFormInput,
     image: File,
+    feeInfo?: { launchFee: bigint; tradingFeeRate: bigint },
   ): Promise<LaunchPreparation> {
     console.info('[launch] reading raised token config');
     const raisedTokens = await fourMemeClient.fetchPublicConfig();
@@ -111,9 +94,12 @@ export class TokenLaunchService {
     console.info('[launch] creating four.meme createArg/signature');
     const createBody = fourMemeClient.buildCreateBody(form, imageUrl, selectedRaisedToken);
     const response = await fourMemeClient.createToken(accessToken, createBody);
-    const creationFeeWei = await this.computeCreationFee(
+    const { launchFee, tradingFeeRate } = feeInfo ?? (await this.readLaunchFees());
+    const creationFeeWei = this.computeCreationFee(
+      launchFee,
       selectedRaisedToken.symbol,
       String(createBody.preSale ?? '0'),
+      tradingFeeRate,
     );
 
     return {
@@ -141,7 +127,8 @@ export class TokenLaunchService {
       description: form.agentDescription,
     });
 
-    const preparation = await this.prepareLaunchWithAccessToken(accessToken, form, image);
+    const feeInfo = await this.readLaunchFees();
+    const preparation = await this.prepareLaunchWithAccessToken(accessToken, form, image, feeInfo);
     const walletClient = createWalletClient({
       account,
       chain: bsc,
@@ -152,11 +139,12 @@ export class TokenLaunchService {
       account.address,
       preparation.selectedRaisedToken,
       form.preSale,
+      feeInfo.tradingFeeRate,
     );
 
     const txHash = await walletClient.writeContract({
       address: TOKEN_MANAGER2_ADDRESS,
-      abi: writeAbi,
+      abi: tokenManagerAbi,
       functionName: 'createToken',
       args: [preparation.createArg, preparation.signature],
       value: BigInt(preparation.creationFeeWei),
@@ -180,6 +168,7 @@ export class TokenLaunchService {
     owner: `0x${string}`,
     raisedToken: RaisedTokenConfig,
     preSaleValue: string,
+    feeRate: bigint,
   ) {
     if (raisedToken.symbol === 'BNB') return;
     if (!preSaleValue || Number(preSaleValue) <= 0) return;
@@ -188,7 +177,7 @@ export class TokenLaunchService {
     }
 
     const tokenAddress = raisedToken.symbolAddress as `0x${string}`;
-    const [decimals, allowance, feeRate] = await Promise.all([
+    const [decimals, allowance] = await Promise.all([
       this.publicClient.readContract({
         address: tokenAddress,
         abi: erc20Abi,
@@ -199,11 +188,6 @@ export class TokenLaunchService {
         abi: erc20Abi,
         functionName: 'allowance',
         args: [owner, TOKEN_MANAGER2_ADDRESS],
-      }),
-      this.publicClient.readContract({
-        address: TOKEN_MANAGER2_ADDRESS,
-        abi: readAbi,
-        functionName: '_tradingFeeRate',
       }),
     ]);
 
@@ -227,24 +211,34 @@ export class TokenLaunchService {
     console.info(`[launch] ${raisedToken.symbol} approve tx confirmed: ${approveHash}`);
   }
 
-  private async computeCreationFee(raisedSymbol: string, preSaleValue: string): Promise<string> {
-    const launchFee = await this.publicClient.readContract({
-      address: TOKEN_MANAGER2_ADDRESS,
-      abi: readAbi,
-      functionName: '_launchFee',
-    });
-
+  private computeCreationFee(
+    launchFee: bigint,
+    raisedSymbol: string,
+    preSaleValue: string,
+    tradingFeeRate: bigint,
+  ): string {
     if (raisedSymbol !== 'BNB' || parseTokenAmount(preSaleValue, 18) <= 0n) {
       return launchFee.toString();
     }
 
-    const tradingFeeRate = await this.publicClient.readContract({
-      address: TOKEN_MANAGER2_ADDRESS,
-      abi: readAbi,
-      functionName: '_tradingFeeRate',
-    });
-
     return computeLaunchCreationFee(launchFee, raisedSymbol, preSaleValue, tradingFeeRate).toString();
+  }
+
+  private async readLaunchFees() {
+    const [launchFee, tradingFeeRate] = await Promise.all([
+      this.publicClient.readContract({
+        address: TOKEN_MANAGER2_ADDRESS,
+        abi: tokenManagerAbi,
+        functionName: '_launchFee',
+      }),
+      this.publicClient.readContract({
+        address: TOKEN_MANAGER2_ADDRESS,
+        abi: tokenManagerAbi,
+        functionName: '_tradingFeeRate',
+      }),
+    ]);
+
+    return { launchFee, tradingFeeRate };
   }
 }
 

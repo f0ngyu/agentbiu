@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { launchFormSchema, readLaunchFormFields } from '@agentbiu/shared';
 import { tokenLaunchService } from '../services/token-launch-service';
 import { walletSessionService } from '../services/wallet-service';
-import { getErrorMessage, getErrorStatus, HttpError } from '../lib/errors';
+import { getErrorMessage, getErrorStatus, HttpError, zodErrorMessage } from '../lib/errors';
 
 export const launchRoutes = new Hono();
 
@@ -47,7 +47,7 @@ export async function parseLaunchRequest(request: { formData(): Promise<FormData
   const parsed = launchFormSchema.safeParse(readLaunchFormFields(formData));
 
   if (!parsed.success) {
-    throw new HttpError(400, parsed.error.issues[0]?.message || '表单参数不合法');
+    throw new HttpError(400, zodErrorMessage(parsed.error, '表单参数不合法'));
   }
 
   return {
