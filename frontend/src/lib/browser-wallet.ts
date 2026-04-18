@@ -4,30 +4,18 @@ import {
   BSC_CHAIN_ID,
   BSC_CHAIN_NAME,
   BSC_RPC_URL,
+  erc20Abi,
   EIP8004_NFT_ADDRESS,
+  nft8004Abi,
   TOKEN_MANAGER2_ADDRESS,
+  tokenManagerAbi,
   computeRequiredAllowance,
   extractTokenAddressFromLogs,
   parseTokenAmount,
 } from '@agentbiu/shared';
-import { createPublicClient, createWalletClient, custom, http, parseAbi } from 'viem';
+import { createPublicClient, createWalletClient, custom, http } from 'viem';
 import type { LaunchPreparation } from '@agentbiu/shared';
 import { bsc } from 'viem/chains';
-
-const registerAbi = parseAbi([
-  'function register(string agentURI) returns (uint256 agentId)',
-]);
-
-const createTokenAbi = parseAbi([
-  'function createToken(bytes args, bytes signature) payable',
-  'function _tradingFeeRate() view returns (uint256)',
-]);
-
-const erc20Abi = parseAbi([
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)',
-  'function decimals() view returns (uint8)',
-]);
 
 function getProvider() {
   if (!window.ethereum) {
@@ -113,7 +101,7 @@ export async function registerIdentityWithBrowser(address: `0x${string}`, agentU
   const walletClient = getWalletClient(address);
   const hash = await walletClient.writeContract({
     address: EIP8004_NFT_ADDRESS,
-    abi: registerAbi,
+    abi: nft8004Abi,
     functionName: 'register',
     args: [agentURI],
     account: address,
@@ -132,7 +120,7 @@ export async function createTokenWithBrowser(
   const walletClient = getWalletClient(address);
   const hash = await walletClient.writeContract({
     address: TOKEN_MANAGER2_ADDRESS,
-    abi: createTokenAbi,
+    abi: tokenManagerAbi,
     functionName: 'createToken',
     args: [input.createArg, input.signature],
     value: BigInt(input.creationFeeWei),
@@ -177,7 +165,7 @@ async function ensureRaisedTokenApproval(
     }),
     publicClient.readContract({
       address: TOKEN_MANAGER2_ADDRESS,
-      abi: createTokenAbi,
+      abi: tokenManagerAbi,
       functionName: '_tradingFeeRate',
     }),
   ]);

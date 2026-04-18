@@ -11,11 +11,58 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { bsc } from 'viem/chains';
 import { appEnv } from '../lib/env';
 
+type Nft8004ReceiptLog = {
+  address: string;
+  data: `0x${string}`;
+  topics: readonly `0x${string}`[];
+};
+
+type Nft8004PublicClient = {
+  readContract(args: {
+    address: `0x${string}`;
+    abi: typeof nft8004Abi;
+    functionName: 'balanceOf';
+    args: [`0x${string}`];
+  }): Promise<bigint>;
+  waitForTransactionReceipt(args: { hash: `0x${string}` }): Promise<{
+    logs: Nft8004ReceiptLog[];
+  }>;
+};
+
+type Nft8004WalletClient = {
+  writeContract(args: {
+    address: `0x${string}`;
+    abi: typeof nft8004Abi;
+    functionName: 'register';
+    args: [string];
+  }): Promise<`0x${string}`>;
+};
+
+type Nft8004ServiceDeps = {
+  publicClient?: Nft8004PublicClient;
+  walletClientFactory?: (account: ReturnType<typeof privateKeyToAccount>) => Nft8004WalletClient;
+};
+
 export class Nft8004Service {
-  private publicClient = createPublicClient({
-    chain: bsc,
-    transport: http(appEnv.bscRpcUrl),
-  });
+  private readonly publicClient: Nft8004PublicClient;
+  private readonly walletClientFactory: (account: ReturnType<typeof privateKeyToAccount>) => Nft8004WalletClient;
+
+  constructor(deps: Nft8004ServiceDeps = {}) {
+    this.publicClient =
+      deps.publicClient ??
+      (createPublicClient({
+        chain: bsc,
+        transport: http(appEnv.bscRpcUrl),
+      }) as unknown as Nft8004PublicClient);
+    this.walletClientFactory =
+      deps.walletClientFactory ??
+      ((account) =>
+        createWalletClient({
+          account,
+          chain: bsc,
+          transport: http(appEnv.bscRpcUrl),
+        }) as unknown as Nft8004WalletClient);
+  }
 
   async check(address: string): Promise<IdentityCheckResult> {
     const balance = await this.publicClient.readContract({
@@ -49,11 +96,7 @@ export class Nft8004Service {
     input: RegisterIdentityRequest,
   ): Promise<RegisterIdentityResult> {
     const account = privateKeyToAccount(privateKey);
-    const walletClient = createWalletClient({
-      account,
-      chain: bsc,
-      transport: http(appEnv.bscRpcUrl),
-    });
+    const walletClient = this.walletClientFactory(account);
 
     const agentURI = buildAgentURI({
       name: input.agentName,
@@ -77,7 +120,7 @@ export class Nft8004Service {
         const decoded = decodeEventLog({
           abi: nft8004Abi,
           data: log.data,
-          topics: log.topics,
+          topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
         });
         if (decoded.eventName === 'Registered') {
           agentId = Number((decoded.args as { agentId: bigint }).agentId);
