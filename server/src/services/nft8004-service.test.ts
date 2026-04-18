@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { encodeAbiParameters, encodeEventTopics, parseAbiItem } from 'viem';
 import { appEnv } from '../lib/env';
-import { Nft8004Service } from './nft8004-service';
+import { Nft8004Service, type Nft8004PublicClient, type Nft8004WalletClient } from './nft8004-service';
 
 const address = '0x1111111111111111111111111111111111111111';
 const privateKey =
@@ -12,7 +12,7 @@ const registeredEvent = parseAbiItem(
 
 function buildRegisteredLog(agentId: bigint, agentURI: string) {
   return {
-    address: appEnv.eip8004Address,
+    address: appEnv.eip8004Address as `0x${string}`,
     topics: encodeEventTopics({
       abi: [registeredEvent],
       eventName: 'Registered',
@@ -39,14 +39,15 @@ describe('Nft8004Service', () => {
   });
 
   test('check maps contract balance to hasIdentity', async () => {
-    const readContract = mock(async () => 2n);
-    const service = new Nft8004Service({
-      publicClient: {
-        readContract,
-        async waitForTransactionReceipt() {
-          return { logs: [] };
-        },
+    const readContract = mock(async (_args: Parameters<Nft8004PublicClient['readContract']>[0]) => 2n);
+    const publicClient: Nft8004PublicClient = {
+      readContract,
+      async waitForTransactionReceipt() {
+        return { logs: [] };
       },
+    };
+    const service = new Nft8004Service({
+      publicClient,
     });
 
     const result = await service.check(address);
@@ -55,22 +56,22 @@ describe('Nft8004Service', () => {
   });
 
   test('registerWithPrivateKey parses Registered event', async () => {
-    const walletWrite = mock(async () => '0xabc' as const);
-    const service = new Nft8004Service({
-      publicClient: {
-        async readContract() {
-          return 0n;
-        },
-        async waitForTransactionReceipt() {
-          return {
-            logs: [buildRegisteredLog(7n, 'agent-uri')],
-          };
-        },
+    const walletWrite = mock(async (_args: Parameters<Nft8004WalletClient['writeContract']>[0]) => '0xabc' as const);
+    const publicClient: Nft8004PublicClient = {
+      async readContract(_args) {
+        return 0n;
       },
+      async waitForTransactionReceipt() {
+        return { logs: [buildRegisteredLog(7n, 'agent-uri')] };
+      },
+    };
+    const walletClient: Nft8004WalletClient = {
+      writeContract: walletWrite,
+    };
+    const service = new Nft8004Service({
+      publicClient,
       walletClientFactory() {
-        return {
-          writeContract: walletWrite,
-        };
+        return walletClient;
       },
     });
 
@@ -81,20 +82,47 @@ describe('Nft8004Service', () => {
     expect(result.agentURI.startsWith('data:application/json;base64,')).toBe(true);
   });
 
-  test('ensureIdentity skips registration when identity already exists', async () => {
-    const readContract = mock(async () => 1n);
-    const walletWrite = mock(async () => '0xabc' as const);
-    const service = new Nft8004Service({
-      publicClient: {
-        readContract,
-        async waitForTransactionReceipt() {
-          return { logs: [] };
-        },
+  test('registerWithPrivateKey returns null agentId when logs are empty', async () => {
+    const walletWrite = mock(async (_args: Parameters<Nft8004WalletClient['writeContract']>[0]) => '0xabc' as const);
+    const publicClient: Nft8004PublicClient = {
+      async readContract(_args) {
+        return 0n;
       },
+      async waitForTransactionReceipt() {
+        return { logs: [] };
+      },
+    };
+    const walletClient: Nft8004WalletClient = {
+      writeContract: walletWrite,
+    };
+    const service = new Nft8004Service({
+      publicClient,
       walletClientFactory() {
-        return {
-          writeContract: walletWrite,
-        };
+        return walletClient;
+      },
+    });
+
+    const result = await service.registerWithPrivateKey(privateKey, { agentName: 'Agent BIU' });
+    expect(walletWrite).toHaveBeenCalledTimes(1);
+    expect(result.agentId).toBeNull();
+  });
+
+  test('ensureIdentity skips registration when identity already exists', async () => {
+    const readContract = mock(async (_args: Parameters<Nft8004PublicClient['readContract']>[0]) => 1n);
+    const walletWrite = mock(async (_args: Parameters<Nft8004WalletClient['writeContract']>[0]) => '0xabc' as const);
+    const publicClient: Nft8004PublicClient = {
+      readContract,
+      async waitForTransactionReceipt() {
+        return { logs: [] };
+      },
+    };
+    const walletClient: Nft8004WalletClient = {
+      writeContract: walletWrite,
+    };
+    const service = new Nft8004Service({
+      publicClient,
+      walletClientFactory() {
+        return walletClient;
       },
     });
 
@@ -106,24 +134,25 @@ describe('Nft8004Service', () => {
 
   test('ensureIdentity registers and rechecks when identity is missing', async () => {
     let calls = 0;
-    const readContract = mock(async () => {
+    const readContract = mock(async (_args: Parameters<Nft8004PublicClient['readContract']>[0]) => {
+      // keep the call count-based branch for the recheck path
       calls += 1;
       return calls === 1 ? 0n : 1n;
     });
-    const walletWrite = mock(async () => '0xdef' as const);
-    const service = new Nft8004Service({
-      publicClient: {
-        readContract,
-        async waitForTransactionReceipt() {
-          return {
-            logs: [buildRegisteredLog(9n, 'agent-uri')],
-          };
-        },
+    const walletWrite = mock(async (_args: Parameters<Nft8004WalletClient['writeContract']>[0]) => '0xdef' as const);
+    const publicClient: Nft8004PublicClient = {
+      readContract,
+      async waitForTransactionReceipt() {
+        return { logs: [buildRegisteredLog(9n, 'agent-uri')] };
       },
+    };
+    const walletClient: Nft8004WalletClient = {
+      writeContract: walletWrite,
+    };
+    const service = new Nft8004Service({
+      publicClient,
       walletClientFactory() {
-        return {
-          writeContract: walletWrite,
-        };
+        return walletClient;
       },
     });
 
